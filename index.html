@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Wind Post — Paper Plane Courier</title>
+<style>
+:root { --ink:#1d3557; --accent:#ffb703; --red:#ef4444; --paper:#fffdf6; }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#7ec8f7; font-family:'Trebuchet MS','Segoe UI',system-ui,-apple-system,sans-serif; color:var(--ink); }
+#wrap { position:fixed; inset:0; }
+canvas { display:block; width:100%; height:100%; touch-action:none; cursor:crosshair; }
+.hidden { display:none !important; }
+#hud { position:absolute; top:0; left:0; right:0; display:flex; align-items:center; gap:10px; padding:10px 12px; pointer-events:none; z-index:4; font-weight:700; }
+.pill { background:rgba(255,253,246,.92); border-radius:999px; padding:6px 12px; box-shadow:0 2px 8px rgba(20,60,100,.25); font-size:15px; white-space:nowrap; }
+#inkWrap { display:flex; align-items:center; gap:6px; margin-left:auto; }
+#inkBarOuter { width:130px; height:14px; background:#dbeafe; border-radius:999px; overflow:hidden; box-shadow:inset 0 1px 3px rgba(0,0,0,.2); }
+#inkBar { height:100%; width:100%; background:linear-gradient(90deg,#38bdf8,#2563eb); border-radius:999px; }
+.iconBtn { pointer-events:auto; border:none; background:rgba(255,253,246,.92); color:var(--ink); width:38px; height:38px; border-radius:50%; font-size:18px; cursor:pointer; box-shadow:0 2px 8px rgba(20,60,100,.25); }
+.iconBtn:active { transform:scale(.92); }
+#hint { position:absolute; bottom:10px; left:0; right:0; text-align:center; z-index:4; pointer-events:none; color:#fff; font-weight:700; font-size:15px; text-shadow:0 1px 4px rgba(20,60,100,.6); }
+.overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(13,42,67,.45); z-index:6; padding:14px; }
+.panel { background:var(--paper); border-radius:22px; padding:26px 28px; max-width:560px; width:100%; text-align:center; box-shadow:0 14px 40px rgba(10,40,70,.35); max-height:92vh; overflow:auto; }
+.panel h1 { margin:0 0 4px; font-size:52px; letter-spacing:2px; color:var(--ink); }
+.panel h1 .post { color:var(--red); }
+.panel h2 { margin:0 0 10px; font-size:30px; }
+.tagline { font-size:17px; margin:0 0 18px; color:#457; }
+.btn { display:inline-block; border:none; border-radius:999px; padding:13px 30px; margin:5px; font-size:19px; font-weight:800; font-family:inherit; cursor:pointer; color:#fff; background:#f59e0b; box-shadow:0 4px 0 #b45309, 0 6px 14px rgba(0,0,0,.2); }
+.btn:active { transform:translateY(3px); box-shadow:0 1px 0 #b45309; }
+.btn.blue { background:#2563eb; box-shadow:0 4px 0 #1e40af, 0 6px 14px rgba(0,0,0,.2); }
+.btn.blue:active { box-shadow:0 1px 0 #1e40af; }
+.btn.green { background:#16a34a; box-shadow:0 4px 0 #166534, 0 6px 14px rgba(0,0,0,.2); }
+.btn.green:active { box-shadow:0 1px 0 #166534; }
+.btn.ghost { background:#e2e8f0; color:var(--ink); box-shadow:0 4px 0 #94a3b8; }
+.btn.ghost:active { box-shadow:0 1px 0 #94a3b8; }
+.stars { font-size:34px; letter-spacing:6px; margin:6px 0 10px; color:var(--accent); }
+.stars .off { color:#cbd5e1; }
+.howto { text-align:left; font-size:15px; line-height:1.55; background:#f0f9ff; border-radius:14px; padding:12px 16px; margin:14px 0; }
+.howto b { color:#0e7490; }
+#levelGrid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:14px 0; }
+.lvlBtn { border:2px solid #bae6fd; background:#f0f9ff; border-radius:14px; padding:12px 4px; font-size:18px; font-weight:800; font-family:inherit; color:var(--ink); cursor:pointer; }
+.lvlBtn small { display:block; font-size:12px; color:var(--accent); letter-spacing:2px; }
+.lvlBtn.locked { opacity:.45; cursor:not-allowed; background:#e2e8f0; }
+.lvlBtn.current { border-color:var(--accent); background:#fef9c3; }
+@media (max-width:600px) { .panel h1 { font-size:38px; } .btn { font-size:16px; padding:11px 20px; } #inkBarOuter { width:70px; } .pill { font-size:12px; padding:5px 8px; } #levelGrid { grid-template-columns:repeat(3,1fr); } }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="960" height="540"></canvas>
+  <div id="hud" class="hidden">
+    <div class="pill" id="levelLabel">Level 1</div>
+    <div class="pill" id="planeLabel">&#9992;&#65039; x 3</div>
+    <div class="pill" id="ringLabel">&#9719; 0/1</div>
+    <div id="inkWrap"><div class="pill">Wind Ink</div><div id="inkBarOuter"><div id="inkBar"></div></div></div>
+    <button class="iconBtn" id="muteBtn" title="Sound on/off">&#128266;</button>
+    <button class="iconBtn" id="pauseBtn" title="Pause">&#9208;</button>
+  </div>
+  <div id="hint" class="hidden">Drag on the sky to draw wind &mdash; guide the plane into the red mailbox!</div>
+  <div class="overlay" id="menuScreen">
+    <div class="panel">
+      <h1>WIND <span class="post">POST</span></h1>
+      <p class="tagline">Deliver paper planes by drawing the wind itself.</p>
+      <div class="stars">&#9733;&#9733;&#9733;</div>
+      <button class="btn green" id="playBtn">&#9654; Play</button>
+      <button class="btn blue" id="levelsBtn">Levels</button>
+      <button class="btn ghost" id="howBtn">How to Play</button>
+      <div class="howto hidden" id="howBox">
+        <b>How to play</b><br>
+        &#9992;&#65039; Paper planes launch from the left and glide. Gravity pulls them down, but speed gives them lift.<br>
+        &#127788; <b>Drag</b> with mouse or finger to draw a wind-gust line. A plane near the line is pushed along it. Gusts fade after 3 seconds.<br>
+        &#128230; Steer the plane into the glowing <b>red mailbox</b>. Fly through <b>golden rings</b> for bonus stars.<br>
+        &#9889; <b>Fans</b> blow all the time. Avoid the ground, water and storm clouds &mdash; a hard hit loses a plane. You get <b>3 planes</b> per level.<br>
+        &#128161; Gentle ground touches bounce. Watch the <b>Wind Ink</b> meter &mdash; it refills slowly.
+      </div>
+      <p style="font-size:13px;color:#789;margin:14px 0 0">Progress is saved on this device. Sound: tiny bleeps only.</p>
+    </div>
+  </div>
+  <div class="overlay hidden" id="levelScreen">
+    <div class="panel">
+      <h2>Choose a Level</h2>
+      <div id="levelGrid"></div>
+      <button class="btn ghost" id="levelsBackBtn">Back</button>
+    </div>
+  </div>
+  <div class="overlay hidden" id="pauseScreen">
+    <div class="panel">
+      <h2>Paused</h2>
+      <p class="tagline">Take a breath. The wind will wait.</p>
+      <button class="btn green" id="resumeBtn">Resume</button>
+      <button class="btn blue" id="restartBtn">Restart Level</button>
+      <button class="btn ghost" id="quitBtn">Main Menu</button>
+    </div>
+  </div>
+  <div class="overlay hidden" id="doneScreen">
+    <div class="panel">
+      <h2 id="doneTitle">Delivered!</h2>
+      <div class="stars" id="doneStars"></div>
+      <p class="tagline" id="doneText"></p>
+      <button class="btn green" id="nextBtn">Next Level &#9654;</button>
+      <button class="btn blue" id="retryBtn">Replay</button>
+      <button class="btn ghost" id="doneMenuBtn">Menu</button>
+    </div>
+  </div>
+  <div class="overlay hidden" id="failScreen">
+    <div class="panel">
+      <h2>Out of Planes!</h2>
+      <p class="tagline">All 3 paper planes crashed before reaching the mailbox.<br>Try a gentler gust &mdash; or draw it sooner.</p>
+      <button class="btn green" id="tryAgainBtn">Try Again</button>
+      <button class="btn ghost" id="failMenuBtn">Main Menu</button>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+/* ================= Wind Post — a single-file game ================= */
+var W = 960, H = 540, GROUND = 482;
+var canvas = document.getElementById('game');
+var ctx = canvas.getContext('2d');
+function $(id) { return document.getElementById(id); }
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function dist(x1, y1, x2, y2) { var dx = x2 - x1, dy = y2 - y1; return Math.sqrt(dx * dx + dy * dy); }
+function segDist(px, py, ax, ay, bx, by) {
+  var dx = bx - ax, dy = by - ay;
+  var len2 = dx * dx + dy * dy;
+  var t = len2 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+  t = clamp(t, 0, 1);
+  var cx = ax + dx * t, cy = ay + dy * t;
+  return dist(px, py, cx, cy);
+}
+/* Levels: mailbox x, rings, hills, water ponds, storm clouds, fans */
+var LEVELS = [
+  { name:'First Flight',  mail:780, rings:[{x:500,y:290}], hills:[], water:[], clouds:[], fans:[] },
+  { name:'Gentle Hill',   mail:830, rings:[{x:430,y:230},{x:650,y:290}], hills:[{x:420,w:260,h:55}], water:[], clouds:[], fans:[] },
+  { name:'Pond Hop',      mail:840, rings:[{x:455,y:250},{x:700,y:290}], hills:[], water:[{x:380,w:150}], clouds:[], fans:[] },
+  { name:'Cloud Watch',   mail:830, rings:[{x:480,y:180},{x:680,y:300}], hills:[], water:[], clouds:[{x:480,y:250,r:34,range:60,sp:0.5,ph:0}], fans:[] },
+  { name:'Fan Fair',      mail:850, rings:[{x:520,y:240},{x:720,y:300}], hills:[], water:[], clouds:[], fans:[{x:500,y:430,ang:-70,range:230,force:430}] },
+  { name:'Two Ponds',     mail:850, rings:[{x:360,y:240},{x:690,y:240},{x:800,y:300}], hills:[{x:470,w:180,h:40}], water:[{x:300,w:120},{x:620,w:140}], clouds:[], fans:[] },
+  { name:'Storm Front',   mail:860, rings:[{x:420,y:150},{x:680,y:300}], hills:[], water:[], clouds:[{x:420,y:240,r:38,range:80,sp:0.7,ph:1},{x:680,y:200,r:34,range:70,sp:0.9,ph:3}], fans:[] },
+  { name:'Fan Corridor',  mail:860, rings:[{x:530,y:220},{x:760,y:300}], hills:[], water:[], clouds:[], fans:[{x:420,y:430,ang:-80,range:210,force:430},{x:640,y:430,ang:-80,range:210,force:430}] },
+  { name:'Hill Country',  mail:870, rings:[{x:300,y:180},{x:620,y:170},{x:790,y:300}], hills:[{x:300,w:220,h:70},{x:620,w:240,h:80}], water:[{x:470,w:110}], clouds:[], fans:[] },
+  { name:'Tempest',       mail:870, rings:[{x:380,y:180},{x:620,y:290},{x:780,y:220}], hills:[], water:[], clouds:[{x:380,y:220,r:36,range:70,sp:0.8,ph:0},{x:600,y:180,r:32,range:60,sp:1.0,ph:2},{x:760,y:280,r:36,range:60,sp:0.7,ph:4}], fans:[{x:500,y:430,ang:-75,range:220,force:430}] },
+  { name:'The Gauntlet',  mail:880, rings:[{x:330,y:200},{x:600,y:170},{x:790,y:290}], hills:[{x:330,w:200,h:60},{x:680,w:220,h:70}], water:[{x:490,w:120}], clouds:[{x:560,y:230,r:34,range:70,sp:0.9,ph:1}], fans:[{x:440,y:430,ang:-70,range:200,force:420}] },
+  { name:'Final Delivery',mail:890, rings:[{x:320,y:170},{x:560,y:260},{x:780,y:200}], hills:[{x:300,w:210,h:65},{x:640,w:230,h:75}], water:[{x:470,w:120},{x:790,w:80}], clouds:[{x:480,y:200,r:34,range:70,sp:1.0,ph:0},{x:700,y:270,r:32,range:60,sp:0.8,ph:2}], fans:[{x:420,y:430,ang:-70,range:210,force:430}] }
+];
+/* ---------------- Save ---------------- */
+function loadSave() {
+  try { var s = JSON.parse(localStorage.getItem('windPostSaveV1')); if (s && typeof s.unlocked === 'number') return s; } catch (e) {}
+  return { unlocked: 0, stars: {} };
+}
+function writeSave() { try { localStorage.setItem('windPostSaveV1', JSON.stringify(save)); } catch (e) {} }
+var save = loadSave();
+var muted = false;
+try { muted = localStorage.getItem('windPostMuted') === '1'; } catch (e) {}
+/* ---------------- Audio: tiny WebAudio bleeps ---------------- */
+var audioCtx = null;
+function initAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) {}
+}
+function beep(freq, dur, type, vol, delay) {
+  if (muted || !audioCtx) return;
+  try {
+    var t0 = audioCtx.currentTime + (delay || 0);
+    var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type || 'sine'; o.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(vol || 0.1, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  } catch (e) {}
+}
+function sfx(name) {
+  if (name === 'click') beep(660, 0.06, 'square', 0.05);
+  else if (name === 'launch') { beep(520, 0.09, 'sine', 0.1); beep(780, 0.1, 'sine', 0.1, 0.08); }
+  else if (name === 'ring') { beep(990, 0.12, 'sine', 0.11); beep(1320, 0.12, 'sine', 0.09, 0.07); }
+  else if (name === 'bounce') beep(300, 0.07, 'sine', 0.08);
+  else if (name === 'crash') { beep(160, 0.28, 'sawtooth', 0.12); beep(70, 0.3, 'sawtooth', 0.1, 0.05); }
+  else if (name === 'deliver') { beep(523, 0.12, 'sine', 0.11); beep(659, 0.12, 'sine', 0.11, 0.1); beep(784, 0.12, 'sine', 0.11, 0.2); beep(1046, 0.22, 'sine', 0.12, 0.3); }
+}
+/* ---------------- Game state ---------------- */
+var screen = 'menu', paused = false, over = false, delivered = false;
+var levelIndex = 0, lvl = LEVELS[0];
+var plane = null, planesLeft = 3, ringsGot = 0, ringStates = [];
+var gusts = [], parts = [], drawPts = [], drawing = false;
+var ink = 100, timeNow = 0;
+/* ---------------- Terrain ---------------- */
+function hillBump(x, h) {
+  var dx = x - h.x, half = h.w / 2;
+  if (Math.abs(dx) >= half) return 0;
+  return h.h * (0.5 + 0.5 * Math.cos(Math.PI * dx / half));
+}
+function groundY(x) {
+  var y = GROUND;
+  for (var i = 0; i < lvl.hills.length; i++) y -= hillBump(x, lvl.hills[i]);
+  return y;
+}
+function mailPos() { return { x: lvl.mail, y: groundY(lvl.mail) - 30 }; }
+function cloudPos(c) { return { x: c.x + Math.sin(timeNow * c.sp + c.ph) * c.range, y: c.y }; }
+function inWater(x) {
+  for (var i = 0; i < lvl.water.length; i++) { var w = lvl.water[i]; if (x > w.x && x < w.x + w.w) return true; }
+  return false;
+}
+function burst(x, y, color, n) {
+  for (var i = 0; i < n; i++) {
+    var a = Math.random() * Math.PI * 2, s = 40 + Math.random() * 160;
+    parts.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 60, life: 0.6 + Math.random() * 0.6, max: 1, color: color, size: 2 + Math.random() * 4 });
+  }
+}
+/* ---------------- Level flow ---------------- */
+function launchPlane() {
+  plane = { x: 70, y: 190, vx: 260, vy: -55, alive: true, bounces: 0 };
+  sfx('launch');
+}
+function startLevel(i) {
+  levelIndex = i; lvl = LEVELS[i];
+  planesLeft = 3; ringsGot = 0; ringStates = [];
+  for (var k = 0; k < lvl.rings.length; k++) ringStates.push(false);
+  gusts = []; parts = []; drawPts = []; drawing = false;
+  ink = 100; timeNow = 0; delivered = false; over = false; paused = false;
+  $('pauseScreen').classList.add('hidden');
+  $('doneScreen').classList.add('hidden');
+  $('failScreen').classList.add('hidden');
+  $('menuScreen').classList.add('hidden');
+  $('levelScreen').classList.add('hidden');
+  $('hud').classList.remove('hidden');
+  $('hint').classList.remove('hidden');
+  screen = 'play';
+  launchPlane();
+  updateHUD();
+}
+/* ---------------- Input: draw wind with mouse or touch ---------------- */
+function toGame(e) {
+  var r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height };
+}
+function endGust() {
+  if (drawPts.length > 1) gusts.push({ pts: drawPts.slice(), life: 3 });
+  drawPts = [];
+}
+canvas.addEventListener('pointerdown', function (e) {
+  if (screen !== 'play' || paused || over) return;
+  initAudio();
+  drawing = true; drawPts = [toGame(e)];
+  e.preventDefault();
+});
+canvas.addEventListener('pointermove', function (e) {
+  if (!drawing) return;
+  var p = toGame(e), last = drawPts[drawPts.length - 1];
+  var d = dist(last.x, last.y, p.x, p.y);
+  if (d > 6) {
+    var cost = d * 0.10;
+    if (ink >= cost) { ink -= cost; drawPts.push(p); }
+    else { drawing = false; endGust(); }
+  }
+  e.preventDefault();
+});
+function stopDraw() { if (drawing) { drawing = false; endGust(); } }
+canvas.addEventListener('pointerup', stopDraw);
+canvas.addEventListener('pointercancel', stopDraw);
+canvas.addEventListener('pointerleave', stopDraw);
+document.addEventListener('keydown', function (e) {
+  if ((e.key === 'Escape' || e.key === 'p' || e.key === 'P') && screen === 'play') togglePause();
+});
+/* ---------------- Scoring, crash, delivery ---------------- */
+function calcStars() {
+  var total = lvl.rings.length;
+  if (ringsGot === total && planesLeft >= 2) return 3;
+  if (ringsGot === total || planesLeft >= 2) return 2;
+  return 1;
+}
+function crash() {
+  if (!plane || !plane.alive) return;
+  plane.alive = false;
+  sfx('crash');
+  burst(plane.x, plane.y, '#e2e8f0', 22);
+  planesLeft--;
+  updateHUD();
+  if (planesLeft > 0) {
+    setTimeout(function () { if (screen === 'play' && !delivered && !over) launchPlane(); }, 700);
+  } else {
+    over = true;
+    setTimeout(function () { if (screen === 'play') showFail(); }, 900);
+  }
+}
+function deliver() {
+  if (delivered) return;
+  delivered = true;
+  plane.alive = false;
+  sfx('deliver');
+  var mp = mailPos();
+  burst(mp.x, mp.y - 10, '#fbbf24', 26);
+  burst(mp.x, mp.y - 10, '#f87171', 14);
+  var stars = calcStars();
+  if (!save.stars) save.stars = {};
+  save.stars[levelIndex] = Math.max(save.stars[levelIndex] || 0, stars);
+  save.unlocked = Math.max(save.unlocked, Math.min(levelIndex + 1, LEVELS.length - 1));
+  writeSave();
+  setTimeout(function () { showDone(stars); }, 900);
+}
+/* ---------------- Update: physics + collisions ---------------- */
+function update(dt) {
+  timeNow += dt;
+  ink = Math.min(100, ink + 8 * dt);
+  for (var i = gusts.length - 1; i >= 0; i--) { gusts[i].life -= dt; if (gusts[i].life <= 0) gusts.splice(i, 1); }
+  if (plane && plane.alive && !delivered) {
+    var p = plane, j, r, f, c;
+    for (var fi = 0; fi < lvl.fans.length; fi++) {
+      f = lvl.fans[fi];
+      var fdx = p.x - f.x, fdy = p.y - f.y;
+      var fd = Math.sqrt(fdx * fdx + fdy * fdy);
+      if (fd < f.range && fd > 10) {
+        var fa = f.ang * Math.PI / 180, fux = Math.cos(fa), fuy = Math.sin(fa);
+        var dot = (fdx / fd) * fux + (fdy / fd) * fuy;
+        if (dot > 0.45) { p.vx += fux * f.force * dt; p.vy += fuy * f.force * dt; }
+      }
+    }
+    for (var gi = 0; gi < gusts.length; gi++) {
+      var g = gusts[gi];
+      for (j = 0; j < g.pts.length - 1; j++) {
+        var d = segDist(p.x, p.y, g.pts[j].x, g.pts[j].y, g.pts[j + 1].x, g.pts[j + 1].y);
+        if (d < 50) {
+          var sx = g.pts[j + 1].x - g.pts[j].x, sy = g.pts[j + 1].y - g.pts[j].y;
+          var sl = Math.sqrt(sx * sx + sy * sy) || 1;
+          var k = 620 * (1 - (d / 50) * 0.35) * dt;
+          p.vx += (sx / sl) * k; p.vy += (sy / sl) * k;
+        }
+      }
+    }
+    var speed = Math.abs(p.vx);
+    p.vy += 210 * dt;
+    if (speed > 40) p.vy -= 0.52 * speed * dt;
+    p.vx -= p.vx * 0.08 * dt;
+    p.vy -= p.vy * 0.03 * dt;
+    p.vx = clamp(p.vx, -120, 420);
+    p.vy = clamp(p.vy, -320, 300);
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    if (p.x < 8) { p.x = 8; p.vx = Math.abs(p.vx) * 0.5; }
+    if (p.x > W - 8) { p.x = W - 8; if (p.vx > 0) p.vx = 0; }
+    if (p.y < 10) { p.y = 10; p.vy = Math.abs(p.vy) * 0.4; }
+    for (r = 0; r < lvl.rings.length; r++) {
+      if (!ringStates[r]) {
+        var rg = lvl.rings[r];
+        if (dist(p.x, p.y, rg.x, rg.y) < 36) { ringStates[r] = true; ringsGot++; sfx('ring'); burst(rg.x, rg.y, '#fbbf24', 14); updateHUD(); }
+      }
+    }
+    var mp = mailPos();
+    if (dist(p.x, p.y, mp.x, mp.y) < 46) { deliver(); return; }
+    if (inWater(p.x) && p.y > GROUND - 26) { crash(); return; }
+    for (var ci = 0; ci < lvl.clouds.length; ci++) {
+      c = cloudPos(lvl.clouds[ci]);
+      if (dist(p.x, p.y, c.x, c.y) < lvl.clouds[ci].r + 12) { crash(); return; }
+    }
+    var gy = groundY(p.x);
+    if (p.y >= gy - 6) {
+      if (p.vy < 170 && p.bounces < 3) {
+        p.y = gy - 6; p.vy = -110; p.vx *= 0.85; p.bounces++;
+        sfx('bounce'); burst(p.x, p.y + 4, '#ffffff', 6);
+      } else { crash(); return; }
+    }
+  }
+  for (var pi = parts.length - 1; pi >= 0; pi--) {
+    var pt = parts[pi];
+    pt.life -= dt; pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 140 * dt;
+    if (pt.life <= 0) parts.splice(pi, 1);
+  }
+}
+/* ---------------- Render ---------------- */
+function drawPuff(x, y, s, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, 26 * s, 0, Math.PI * 2);
+  ctx.arc(x + 24 * s, y + 6 * s, 20 * s, 0, Math.PI * 2);
+  ctx.arc(x - 24 * s, y + 8 * s, 18 * s, 0, Math.PI * 2);
+  ctx.fill();
+}
+function drawFarHills() {
+  var x;
+  ctx.fillStyle = '#9fd0e8';
+  ctx.beginPath(); ctx.moveTo(0, H);
+  for (x = 0; x <= W; x += 16) ctx.lineTo(x, 420 + Math.sin(x * 0.012 + 1.3) * 18);
+  ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#8ec8e0';
+  ctx.beginPath(); ctx.moveTo(0, H);
+  for (x = 0; x <= W; x += 16) ctx.lineTo(x, 448 + Math.sin(x * 0.02 + 0.4) * 13);
+  ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+}
+function drawGround() {
+  var grad = ctx.createLinearGradient(0, 420, 0, H);
+  grad.addColorStop(0, '#7cc46a'); grad.addColorStop(1, '#4c9a52');
+  ctx.beginPath(); ctx.moveTo(0, H);
+  for (var x = 0; x <= W; x += 8) ctx.lineTo(x, groundY(x));
+  ctx.lineTo(W, H); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+  ctx.strokeStyle = '#a5d6a7'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(0, groundY(0));
+  for (x = 8; x <= W; x += 8) ctx.lineTo(x, groundY(x));
+  ctx.stroke();
+}
+function drawWater() {
+  for (var i = 0; i < lvl.water.length; i++) {
+    var w = lvl.water[i];
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(w.x, GROUND - 26, w.w, H - (GROUND - 26));
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2;
+    for (var k = 0; k < 3; k++) {
+      var wy = GROUND - 20 + k * 8;
+      ctx.beginPath();
+      for (var x = w.x + 4; x < w.x + w.w - 4; x += 14) {
+        var yy = wy + Math.sin(x * 0.15 + timeNow * 3 + k) * 2;
+        if (x === w.x + 4) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+      }
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#d9a05b';
+    ctx.fillRect(w.x - 4, GROUND - 28, 8, 6);
+    ctx.fillRect(w.x + w.w - 4, GROUND - 28, 8, 6);
+  }
+}
+function drawFan(f) {
+  var ang = f.ang * Math.PI / 180;
+  ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(ang + Math.PI / 2);
+  var grad = ctx.createLinearGradient(0, 0, 0, -f.range);
+  grad.addColorStop(0, 'rgba(255,255,255,0.55)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(14, 0); ctx.lineTo(64, -f.range); ctx.lineTo(-64, -f.range); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  ctx.save(); ctx.translate(f.x, f.y);
+  ctx.fillStyle = '#64748b';
+  ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 5;
+  for (var i = 0; i < 3; i++) {
+    var ba = timeNow * 6 + (i * Math.PI * 2) / 3;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(ba) * 15, Math.sin(ba) * 15); ctx.stroke();
+  }
+  ctx.fillStyle = '#f59e0b';
+  ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function drawRing(rg, got) {
+  var pulse = 1 + Math.sin(timeNow * 4 + rg.x) * 0.08;
+  ctx.save();
+  if (got) ctx.globalAlpha = 0.22;
+  ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.arc(rg.x, rg.y, 24 * pulse, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = '#fde68a'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(rg.x, rg.y, 24 * pulse, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+function drawMailbox() {
+  var mp = mailPos();
+  var glow = 0.5 + Math.sin(timeNow * 4) * 0.25;
+  ctx.save();
+  ctx.globalAlpha = glow * 0.5;
+  ctx.fillStyle = '#fde68a';
+  ctx.beginPath(); ctx.arc(mp.x, mp.y, 52, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(mp.x, mp.y);
+  ctx.fillStyle = '#78350f'; ctx.fillRect(-4, 12, 8, 30);
+  ctx.fillStyle = '#ef4444';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(-16, -14, 32, 26, [8, 8, 4, 4]); else ctx.rect(-16, -14, 32, 26);
+  ctx.fill();
+  ctx.fillStyle = '#991b1b'; ctx.fillRect(-12, -4, 24, 4);
+  ctx.fillStyle = '#f59e0b'; ctx.fillRect(12, -12, 4, 14); ctx.fillRect(12, -12, 8, 6);
+  ctx.restore();
+}
+function drawGust(pts, alpha) {
+  if (pts.length < 2) return;
+  ctx.save();
+  ctx.globalAlpha = clamp(alpha, 0, 1);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.strokeStyle = '#e0f2fe'; ctx.lineWidth = 8;
+  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+  for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
+  ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+  for (i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
+  ctx.fillStyle = '#2563eb';
+  for (i = 4; i < pts.length; i += 6) {
+    var a = pts[i], b = pts[i - 1];
+    var ang = Math.atan2(a.y - b.y, a.x - b.x);
+    ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(ang);
+    ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-6, -6); ctx.lineTo(-6, 6); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+function drawStorm(c, r) {
+  drawPuff(c.x, c.y, r / 30, '#64748b');
+  drawPuff(c.x, c.y + 4, r / 34, '#475569');
+  if (Math.sin(timeNow * 9 + c.x) > 0.3) {
+    ctx.strokeStyle = '#fde047'; ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 4, c.y + r * 0.4);
+    ctx.lineTo(c.x + 2, c.y + r * 0.7);
+    ctx.lineTo(c.x - 3, c.y + r * 0.7);
+    ctx.lineTo(c.x + 4, c.y + r);
+    ctx.stroke();
+  }
+}
+function drawPlane() {
+  var p = plane;
+  var ang = Math.atan2(p.vy, p.vx);
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(ang);
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(20, 0); ctx.lineTo(-14, -10); ctx.lineTo(-6, 0); ctx.lineTo(-14, 10); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(20, 0); ctx.lineTo(-6, 0); ctx.stroke();
+  ctx.fillStyle = '#ef4444'; ctx.fillRect(-10, -3, 8, 2);
+  ctx.restore();
+}
+/* ---------------- Main render ---------------- */
+function render() {
+  var sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#5db4f0'); sky.addColorStop(0.6, '#a8d8f8'); sky.addColorStop(1, '#e3f4ff');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = '#fff7ae';
+  ctx.beginPath(); ctx.arc(860, 70, 34, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,247,174,0.7)'; ctx.lineWidth = 4;
+  for (var i = 0; i < 8; i++) {
+    var a = (i / 8) * Math.PI * 2 + timeNow * 0.05;
+    ctx.beginPath();
+    ctx.moveTo(860 + Math.cos(a) * 44, 70 + Math.sin(a) * 44);
+    ctx.lineTo(860 + Math.cos(a) * 56, 70 + Math.sin(a) * 56);
+    ctx.stroke();
+  }
+  ctx.restore();
+  for (var ci = 0; ci < 5; ci++) {
+    var cx = ((ci * 230 + timeNow * (6 + ci * 3)) % (W + 240)) - 120;
+    var cy = 55 + (ci * 53) % 130;
+    drawPuff(cx, cy, 0.7 + (ci % 3) * 0.25, 'rgba(255,255,255,0.85)');
+  }
+  drawFarHills();
+  drawGround();
+  drawWater();
+  var fi, ri, si, gi, pi;
+  for (fi = 0; fi < lvl.fans.length; fi++) drawFan(lvl.fans[fi]);
+  for (ri = 0; ri < lvl.rings.length; ri++) drawRing(lvl.rings[ri], ringStates[ri]);
+  drawMailbox();
+  for (gi = 0; gi < gusts.length; gi++) drawGust(gusts[gi].pts, gusts[gi].life / 3);
+  if (drawing && drawPts.length > 1) drawGust(drawPts, 1);
+  for (si = 0; si < lvl.clouds.length; si++) drawStorm(cloudPos(lvl.clouds[si]), lvl.clouds[si].r);
+  if (plane && plane.alive) drawPlane();
+  for (pi = 0; pi < parts.length; pi++) {
+    var pt = parts[pi];
+    ctx.globalAlpha = clamp(pt.life / pt.max, 0, 1);
+    ctx.fillStyle = pt.color;
+    ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+/* ---------------- UI screens ---------------- */
+function starsHtml(n) {
+  var s = '';
+  for (var i = 0; i < 3; i++) s += i < n ? '&#9733;' : '<span class="off">&#9733;</span>';
+  return s;
+}
+function updateHUD() {
+  $('levelLabel').textContent = 'Level ' + (levelIndex + 1) + ' \u00b7 ' + lvl.name;
+  $('planeLabel').innerHTML = '&#9992;&#65039; x ' + planesLeft;
+  $('ringLabel').textContent = '&#9719; ' + ringsGot + '/' + lvl.rings.length;
+  $('inkBar').style.width = clamp(ink, 0, 100) + '%';
+  $('muteBtn').innerHTML = muted ? '&#128263;' : '&#128266;';
+}
+function hideAllScreens() {
+  var ids = ['menuScreen', 'levelScreen', 'pauseScreen', 'doneScreen', 'failScreen'];
+  for (var i = 0; i < ids.length; i++) $(ids[i]).classList.add('hidden');
+}
+function showMenu() {
+  screen = 'menu'; paused = false;
+  hideAllScreens();
+  $('hud').classList.add('hidden');
+  $('hint').classList.add('hidden');
+  $('menuScreen').classList.remove('hidden');
+}
+function showLevels() {
+  screen = 'levels';
+  hideAllScreens();
+  $('hud').classList.add('hidden');
+  $('hint').classList.add('hidden');
+  buildLevels();
+  $('levelScreen').classList.remove('hidden');
+}
+function showDone(stars) {
+  screen = 'done';
+  $('doneTitle').textContent = 'Delivered!';
+  $('doneStars').innerHTML = starsHtml(stars);
+  $('doneText').textContent = 'Level ' + (levelIndex + 1) + ' \u00b7 ' + lvl.name + ' \u2014 ' + ringsGot + ' of ' + lvl.rings.length + ' rings, ' + planesLeft + ' plane' + (planesLeft === 1 ? '' : 's') + ' left.';
+  $('nextBtn').style.display = levelIndex >= LEVELS.length - 1 ? 'none' : 'inline-block';
+  hideAllScreens();
+  $('doneScreen').classList.remove('hidden');
+}
+function showFail() {
+  screen = 'fail';
+  hideAllScreens();
+  $('failScreen').classList.remove('hidden');
+}
+function togglePause() {
+  if (screen !== 'play') return;
+  paused = !paused;
+  if (paused) $('pauseScreen').classList.remove('hidden');
+  else $('pauseScreen').classList.add('hidden');
+}
+function buildLevels() {
+  var grid = $('levelGrid');
+  grid.innerHTML = '';
+  for (var i = 0; i < LEVELS.length; i++) {
+    (function (idx) {
+      var b = document.createElement('button');
+      var locked = idx > save.unlocked;
+      var st = save.stars[idx] || 0;
+      b.className = 'lvlBtn' + (locked ? ' locked' : '') + (idx === levelIndex ? ' current' : '');
+      b.innerHTML = (idx + 1) + '<small>' + (locked ? '&#128274;' : ('&#9733;'.repeat(st) + '&#9734;'.repeat(3 - st))) + '</small>';
+      b.disabled = locked;
+      b.onclick = function () { initAudio(); sfx('click'); startLevel(idx); };
+      grid.appendChild(b);
+    })(i);
+  }
+}
+/* ---------------- Buttons ---------------- */
+$('playBtn').onclick = function () { initAudio(); sfx('click'); startLevel(Math.min(save.unlocked, LEVELS.length - 1)); };
+$('levelsBtn').onclick = function () { initAudio(); sfx('click'); showLevels(); };
+$('howBtn').onclick = function () { $('howBox').classList.toggle('hidden'); };
+$('levelsBackBtn').onclick = function () { sfx('click'); showMenu(); };
+$('pauseBtn').onclick = function () { sfx('click'); togglePause(); };
+$('muteBtn').onclick = function () {
+  muted = !muted;
+  try { localStorage.setItem('windPostMuted', muted ? '1' : '0'); } catch (e) {}
+  updateHUD();
+  if (!muted) { initAudio(); sfx('click'); }
+};
+$('resumeBtn').onclick = function () { sfx('click'); togglePause(); };
+$('restartBtn').onclick = function () { sfx('click'); startLevel(levelIndex); };
+$('quitBtn').onclick = function () { sfx('click'); showMenu(); };
+$('nextBtn').onclick = function () { sfx('click'); startLevel(Math.min(levelIndex + 1, LEVELS.length - 1)); };
+$('retryBtn').onclick = function () { sfx('click'); startLevel(levelIndex); };
+$('doneMenuBtn').onclick = function () { sfx('click'); showMenu(); };
+$('tryAgainBtn').onclick = function () { sfx('click'); startLevel(levelIndex); };
+$('failMenuBtn').onclick = function () { sfx('click'); showMenu(); };
+/* ---------------- Main loop + init ---------------- */
+var lastTs = 0;
+function loop(ts) {
+  requestAnimationFrame(loop);
+  var dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 0.016;
+  lastTs = ts;
+  if (screen === 'play' && !paused && !over) update(dt);
+  else timeNow += dt;
+  render();
+}
+updateHUD();
+showMenu();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
