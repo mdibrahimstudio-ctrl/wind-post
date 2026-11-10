@@ -572,7 +572,7 @@ function starsHtml(n) {
 function updateHUD() {
   $('levelLabel').textContent = 'Level ' + (levelIndex + 1) + ' \u00b7 ' + lvl.name;
   $('planeLabel').innerHTML = '&#9992;&#65039; x ' + planesLeft;
-  $('ringLabel').textContent = '&#9719; ' + ringsGot + '/' + lvl.rings.length;
+  $('ringLabel').innerHTML = '&#9719; ' + ringsGot + '/' + lvl.rings.length;
   $('inkBar').style.width = clamp(ink, 0, 100) + '%';
   $('muteBtn').innerHTML = muted ? '&#128263;' : '&#128266;';
 }
